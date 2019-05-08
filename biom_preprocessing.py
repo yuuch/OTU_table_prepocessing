@@ -10,7 +10,11 @@ class MetaGenomicsPreprocessing(object):
         else:
             self.is_metadata_read = False
         if biom_path:
+            # read biom and transpose
             self.feature_table = biom.load_table(biom_path).to_dataframe().T
+            # normalized the feature table for every sample
+            self.feature_table = self.feature_table.div(\
+                self.feature_table.sum(axis=1),axis=0)
             self.is_feature_table_read = True 
         else:
             self.is_feature_table_read = False
@@ -30,9 +34,18 @@ class MetaGenomicsPreprocessing(object):
             thd: a threshold 
         """
         with Pool() as p:
-            p.map(self.compute_prevalence, self.feature_table.columns)
+            prvl = p.map(self.compute_prevalence, self.feature_table.columns)
+        columns = self.feature_table.columns
+        remove_columns = []
+        for i, ele in enumerate(prvl):
+            if ele < thd:
+                remove_columns.append(columns[i])
+        self.feature_table = self.feature_table.drop(columns=remove_columns)
 
 
-        pass
+
+
     def select_sample(self):
+        pass
+    def explor_metadata(self):
         pass
