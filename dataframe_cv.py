@@ -3,6 +3,7 @@ from multiprocessing import Pool
 import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_auc_score
+import os
 
 import tamtree as tt
 class CrossValidation(object):
@@ -58,10 +59,11 @@ class CrossValidation(object):
         # perform machine learning
         self.classifier.fit(train_df.values,train_labels)
         pred_prob = self.classifier.pred_prob(test_df.values)[:,1]
-        auc = roc_auc_score(test_label, pred_prob)
+        auc = roc_auc_score(test_labels, pred_prob)
         return auc
 
     def parallel_learning(self):
-        with Pool() as p:
+        n_processor = min(self.n_fold,os.cpu_count())
+        with Pool(n_processor) as p:
             aucs = p.map(self.machine_learning,self.indexes)
         return aucs
