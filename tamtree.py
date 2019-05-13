@@ -11,7 +11,7 @@ class TableMetadataTree(object):
     """ a class merged the metadata, otutable and phylogenetic tree.
     """
     def __init__(self, train_dataframe, tree_path, labels, \
-        test_dataframe, taxonomy_path=None,):
+        test_dataframe, pvalue_thd = 0.01,taxonomy_path=None,):
         self.feature_table = train_dataframe
         self.train_dataframe = train_dataframe
         self.test_dataframe  = test_dataframe
@@ -22,6 +22,8 @@ class TableMetadataTree(object):
         self.labels = labels
         #self.metadata_set_index()
         self.get_featured_tree()
+        self.conserve_thd = 0.55
+        self.pvalue_thd = pvalue_thd
 
         #if taxonomy_path:
         #    self.get_taxonomy_info(taxonomy_path)
@@ -179,20 +181,49 @@ class TableMetadataTree(object):
             else:
                 label_count[label] = 1
         return max(label_count.values())/sum(label_count.values())
-
-    def find_conservatism_clades(self, clade,collect_clades =[],conserve_thd=0.90):
-
-        if self.get_uniqueness(clade) > conserve_thd:
+    def get_mannwitneyu_pvalue(self,clade):
+        col = self.labels
+        idx = clade.sample_series.index
+        temp_dict = {}
+        for i,ele in enumerate(clade.sample_series.values):
+            key = col[idx[i]]
+            if key in temp_dict:
+                temp_dict[key].append(ele)
+            else:
+                temp_dict[key] = [ele]
+        try:
+            #print(len(temp_dict))
+            x = temp_dict[list(temp_dict.keys())[0]]
+            y = temp_dict[list(temp_dict.keys())[1]]
+            #print(len(x),len(y))
+            pvalue = stats.mannwhitneyu(x,y)[1]
+        except:
+            print('less than two class when perform mannwhitneyu test')
+            pvalue = 0.0001
+        clade.pvalue = pvalue
+        return pvalue 
+        
+    def find_conservatism_clades(self, clade,collect_clades =[]):
+        uniqueness_score = self.get_uniqueness(clade)
+        if uniqueness_score > self.conserve_thd:
             collect_clades.append(clade)
+            clade.U_score = uniqueness_score
         else:
             try: # for  non terminal node
                 for subclade in clade.clades:
-                    self.find_conservatism_clades(subclade,obj_col,collect_clades)
+                    self.find_conservatism_clades(subclade,collect_clades)
             except:# for terminal node
                 #collect_clades.append(clade)
-                pass # if 
+                print('some except error: no  non terminal node satisfied the condition')
         self.collect_clades =  collect_clades
+
     def get_new_dataframes(self):
+        print('n_features: ',len(self.collect_clades))
+        #for clade in self.collect_clades:
+        #    print('clade terminals num : ', len(clade.get_terminals()))
+
+       # if len(self.collect_clades) == 1:
+       #     print('U_score:',self.collect_clades[0].U_score)
         traits = []
         for clade in self.collect_clades:
             names = []

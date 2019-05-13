@@ -1,0 +1,67 @@
+import scipy.stats as stats
+from multiprocessing import Pool
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import roc_auc_score
+class MWWRandomForest(object):
+    def __init__(self,dataframe,labels,p_thd = 0.1,n_fold=10):
+        self.dataframe = dataframe
+        self.labels = labels
+        self.get_cv_index()
+
+
+    def get_cv_index(self): 
+        """get the cross validation indexes"""
+        if not self.dataframe.index.all() == self.labels.index.all():
+            print('dataframe and labels index are not matched')
+            return -1
+        skf = StratifiedKFold(n_splits=self.n_fold, random_state=1)
+        skf.get_n_splits(self.n_fold)
+        indexes = []
+        for train_index, test_index in skf.split(self.dataframe,self.labels):
+            indexes.append({'train': train_index,'test':test_index})
+        self.indexes = indexes
+
+    def MWW(self,col_name):
+        """ Mann Whitney U test for one feature"""
+        col = self.dataframe[col_name]
+        idx = col.index
+        temp_dict = {}
+        thd = 0.1
+        for i,ele in enumerate(col):
+            key = self.labels[idx[i]]
+            if key in temp_dict:
+                temp_dict[key].append(ele)
+            else:
+                temp_dict[key] = [ele]
+        try:
+            x = temp_dict[list(temp_dict.keys())[0]]
+            y = temp_dict[list(temp_dict.keys())[1]]
+            pvalue = stats.mannwhitneyu(x,y)[1]
+        except:
+            pvalue = 1
+        if pvalue < thd:
+            return col_name
+        else:
+            return 'bad_column'
+    
+    def get_new_dataframe(self):
+        with Pool() as p:
+            select_columns = p.map(self.MWW,self.dataframe.columns)
+        while 'bad_column' in select_columns:
+            select_columns.remove('bad_column')
+        self.dataframe = self.dataframe[select_columns]
+    def perform_randomforest(self, index):
+        clf = RandomForestClassifier(n_estimators=5000)
+        clf.fit(self.dataframe[index['train']],self.labels[index['train']])
+        clf.predict_proba(self.dataframe[index['test']])
+        auc = roc_auc_score()
+
+        
+
+        
+        
+    def paralell_rf(self):
+        pass
+
+
