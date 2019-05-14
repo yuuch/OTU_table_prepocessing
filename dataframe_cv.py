@@ -106,14 +106,25 @@ class CrossValidation(object):
         self.classifier.fit(train_df.values,train_labels)
         pred_prob = self.classifier.predict_proba(test_df.values)[:,1]
         auc = roc_auc_score(test_labels, pred_prob)
-        return auc
+        return {'auc':auc, 'classifier': self.classifier,'tmt': tmt}
 
     def parallel_learning(self):
         n_processor = min(self.n_fold,os.cpu_count())
         print('n_processor:',n_processor)
         with Pool(n_processor) as p:
-            aucs = p.map(self.machine_learning,self.indexes)
-        return aucs
+            results = p.map(self.machine_learning,self.indexes)
+        # results contain the auc array and classifier
+        self.parallel_results = results
+        return results
+
+    def get_max_auc_classifier(self):
+        M = 0
+        idx = 0
+        for i,ele in enumerate(self.parallel_results):
+            if M < ele['auc']:
+                M = ele['auc']
+                idx = i
+        self.max_auc_result = self.parallel_results[idx]
 
     def he_2018_method(self):
 
@@ -175,3 +186,51 @@ class CrossValidation(object):
             select_columns.remove('bad_column')
         print('n_features: ',len(select_columns))
         return self.dataframe[select_columns]
+    def single_pred(self,dataframe,clf,labels):
+        pred_prob = clf.predict_proba(dataframe)
+        auc = roc_auc_score(labels,pred_prob[:,1])
+        return auc
+
+
+    def test_dataframe_from_other_dataset(self,other_dataframes, labels, \
+        fitted_clf=None):
+        """
+
+        use the cross validation result to test on other datasets
+        
+        Args:
+            other_dataframes: a dict whose values are dataframes
+            labels: lables match to the dataframes
+        """
+
+        # multiprocessor
+        self.get_max_auc_classifier()
+        best_result = self.max_auc_result 
+        tmt = best_result['tmt']
+        with  Pool(len(other_dataframes.keys())) as p:
+            df_arr = p.map(tmt.get_test_dataframe,list(other_dataframes.values()))
+        for i,key in enumerate(other_dataframes.keys()):
+            other_dataframes[key] = df_arr[i]
+        """ single processor    
+        for key in other_dataframes:
+            df = other_dataframes[key]
+            other_dataframes[key] =self.tmt.get_test_dataframe(df)
+        """
+        if not fitted_clf:
+            fitted_clf = best_result['classifier']
+        starmap_arr = []
+        for key in other_dataframes:
+            starmap_arr.append((other_dataframes[key], fitted_clf,labels[key]))
+        with Pool(len(other_dataframes.keys())) as p:
+            aucs = p.starmap(self.single_pred,starmap_arr)
+        aucs_dict = {}
+        j = 0
+        for key in other_dataframes:
+            aucs_dict[key] =aucs[j]
+            j += 1
+        return aucs_dict
+
+
+
+            
+
