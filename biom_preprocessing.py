@@ -10,7 +10,7 @@ class MetaGenomicsPreprocessing(object):
             self.metadata = pd.read_csv(metadata_path, sep='\t')
             self.is_metadata_read = True
             try:
-                self.metadata = self.metadata.set_index('SampleID')
+                self.metadata = self.metadata.set_index('#SampleID')
                 self.metadata = self.metadata.drop('#q2:types')
             except:
                 print('no column named #SampleID or no c #q2:types row')
@@ -189,8 +189,6 @@ class MetaGenomicsPreprocessing(object):
             self.separate_biom_by_feature(sep_col)
             self.get_separate_biom_labels(obj_col)
             sep_col_state = 'yes'
-        print('run pipeline successfully,separate_by:'+ sep_col + \
-            ' state:'+sep_col_state)
 
 
         
