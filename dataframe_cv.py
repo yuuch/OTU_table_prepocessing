@@ -13,15 +13,17 @@ class CrossValidation(object):
     we need only to run the parallel_learning method.
     """
     def __init__(self, dataframe, labels, tree_path, clf, pos_label='y', \
-            n_fold=5):
+            n_fold=5, percent = 50, score_thd=0.4):
         self.dataframe = dataframe
         self.labels = labels
         self.n_fold = n_fold
         self.tree_path = tree_path
         self.classifier = clf
+        self.percent = percent
+        self.score_thd =  score_thd
         self.numeric_labels(pos_label)
         self.get_cv_index()
-    def numeric_labels(self,pos_label):
+    def numeric_labels(self,pos_label='y'):
         tmp = []
         for ele in self.labels:
             if ele == pos_label:
@@ -98,7 +100,8 @@ class CrossValidation(object):
         #train_dataframe = self.undersampling(train_dataframe)
         test_dataframe = self.dataframe.iloc[test_index]
         tmt = tt.TableMetadataTree(train_dataframe,self.tree_path, \
-            self.labels,test_dataframe)
+            self.labels,test_dataframe,percent=self.percent, \
+                uniqueness_score_thd=self.score_thd)
         tmt.find_conservatism_clades(tmt.feature_tree)
         train_df,test_df = tmt.get_new_dataframes()
         #print('train df shape:',train_df.shape)
@@ -130,8 +133,9 @@ class CrossValidation(object):
 
         n_processor = min(self.n_fold,os.cpu_count())
         with Pool(n_processor) as p:
-            aucs = p.map(self.he_machine_learning,self.indexes)
-        return aucs
+            results = p.map(self.he_machine_learning,self.indexes)
+        self.parallel_results = results
+        return results
 
     def he_machine_learning(self,index):
         train_index = index['train']
@@ -145,7 +149,7 @@ class CrossValidation(object):
         self.classifier.fit(train_dataframe.values,train_labels)
         pred_prob = self.classifier.predict_proba(test_dataframe.values)[:,1]
         auc = roc_auc_score(test_labels, pred_prob)
-        return auc
+        return {'auc':auc, 'classifier': self.classifier ,'select_columns':self.select_columns }
 
 
     def MWW(self,index,col_name):
@@ -185,7 +189,9 @@ class CrossValidation(object):
         while 'bad_column' in select_columns:
             select_columns.remove('bad_column')
         print('n_features: ',len(select_columns))
+        self.select_columns = select_columns
         return self.dataframe[select_columns]
+
     def single_pred(self,dataframe,clf,labels):
         pred_prob = clf.predict_proba(dataframe)
         auc = roc_auc_score(labels,pred_prob[:,1])
@@ -229,6 +235,38 @@ class CrossValidation(object):
             aucs_dict[key] =aucs[j]
             j += 1
         return aucs_dict
+    def he_get_test_dataframe(self, dataframe):
+        new_dataframe = dataframe[self.select_columns]
+        return new_dataframe
+
+    
+    def he_test_dataframe_from_other_dataset(self,other_dataframes, labels, \
+        fitted_clf=None):
+
+        self.get_max_auc_classifier()
+        best_result = self.max_auc_result 
+        self.select_columns = best_result['select_columns']
+        print(type(self.select_columns))
+        #TODO
+        with  Pool(len(other_dataframes.keys())) as p:
+            df_arr = p.map(self.he_get_test_dataframe,list(other_dataframes.values()))
+        for i,key in enumerate(other_dataframes.keys()):
+            other_dataframes[key] = df_arr[i]
+        if not fitted_clf:
+            fitted_clf = best_result['classifier']
+        starmap_arr = []
+        for key in other_dataframes:
+            starmap_arr.append((other_dataframes[key], fitted_clf,labels[key]))
+        with Pool(len(other_dataframes.keys())) as p:
+            aucs = p.starmap(self.single_pred,starmap_arr)
+        aucs_dict = {}
+        j = 0
+        for key in other_dataframes:
+            aucs_dict[key] =aucs[j]
+            j += 1
+        return aucs_dict
+        
+
 
 
 

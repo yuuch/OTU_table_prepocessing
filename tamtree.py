@@ -11,7 +11,9 @@ class TableMetadataTree(object):
     """ a class merged the metadata, otutable and phylogenetic tree.
     """
     def __init__(self, train_dataframe, tree_path, labels, \
-        test_dataframe, pvalue_thd = 0.01,taxonomy_path=None,):
+        test_dataframe, percent=50, uniqueness_score_thd=0.5, \
+        pvalue_thd = 0.01,taxonomy_path=None,):
+
         self.feature_table = train_dataframe
         self.train_dataframe = train_dataframe
         self.test_dataframe  = test_dataframe
@@ -22,15 +24,25 @@ class TableMetadataTree(object):
         self.labels = labels
         #self.metadata_set_index()
         self.get_featured_tree()
-        self.conserve_thd = 0.7
+        self.uniqueness_score_thd = uniqueness_score_thd
         self.pvalue_thd = pvalue_thd
-        self.get_pvalue_thd()
+        #self.get_pvalue_thd()
+        self.get_percentile_depth(percent)
 
         #if taxonomy_path:
         #    self.get_taxonomy_info(taxonomy_path)
         #    self.get_domain_otu()
         # self.get_subtree(ID_num)
         # self.get_GI
+    def get_percentile_depth(self,percent):
+        """ get the percetile depth of leaves.
+        Args:
+            percent: between 0 and 100.
+        """
+        lengths = []
+        for t in self.tree.get_terminals():
+            lengths.append(len(self.tree.get_path(t)))
+        self.percentile_depth = np.percentile(lengths,percent)
 
 
     def get_taxonomy_info(self,taxonomy_path):
@@ -160,6 +172,9 @@ class TableMetadataTree(object):
         for t in self.tree.get_terminals():
             t.sample_series = self.feature_table[t.name]
         self.feature_tree = self.recursion_tree(self.tree.root)
+        for clade in self.feature_tree.find_clades(order='level'):
+            clade.depth = 1+len(self.feature_tree.get_path(clade))
+            
         #i = 0
         #for clade in self.feature_tree.find_clades(order='level'):
         #    clade.ID_num = i 
@@ -214,16 +229,24 @@ class TableMetadataTree(object):
         while 0 in terminals_values:
             terminals_values.remove(0)
         self.pvalue_thd = min(self.pvalue_thd,np.mean(terminals_values))
-        print('pvalue_thd',self.pvalue_thd)
+        #print('pvalue_thd',self.pvalue_thd)
         
     def find_conservatism_clades(self, clade,collect_clades =[]):
         # if uniqueness_score > self.conserve_thd:
         # uniqueness_score = self.get_uniqueness(clade)
-        uniqueness_score =  -0.1*math.log10(self.get_mannwitneyu_pvalue(clade))\
-            +self.get_uniqueness(clade)
-        if uniqueness_score > -0.1*math.log10(self.pvalue_thd*(10)) \
-            + self.conserve_thd:
+        # x: pvalue
+        # y : conserved thd
+        # z : depth deviation
+        get_u_score = lambda x,y,z : -0.1 * math.log10(x) + \
+            y-0.5 + \
+            -0.05 * math.log2(abs(z)+1)
+        uniqueness_score = get_u_score(self.get_mannwitneyu_pvalue(clade), \
+            self.get_uniqueness(clade), abs(clade.depth-self.percentile_depth))
+        #uniqueness_score =  -0.1*math.log10(self.get_mannwitneyu_pvalue(clade))\
+        #    +self.get_uniqueness(clade)-0.5- 0.1*math.log2(abs(clade.depth-16)+1)
+        if uniqueness_score > self.uniqueness_score_thd:
             collect_clades.append(clade)
+            #print('Unique: ',uniqueness_score)
             clade.U_score = uniqueness_score
         else:
             try: # for  non terminal node
