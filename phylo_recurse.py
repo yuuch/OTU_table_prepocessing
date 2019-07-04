@@ -152,7 +152,7 @@ class PhyloRecurse(object):
         test_labels = self.labels.iloc[test_index].values
         train_dataframe = self.new_dataframe.iloc[train_index]
         test_dataframe = self.new_dataframe.iloc[test_index]
-        alpha = max(1/self.tree_terminals_num/50,0.000001)
+        alpha =0.00001 
         lasso_clf = Lasso(alpha=alpha,max_iter=2000)
         lasso_clf.fit(train_dataframe.values,train_labels)
         feature_idx = []

@@ -10,7 +10,7 @@ class MetaGenomicsPreprocessing(object):
             self.metadata = pd.read_csv(metadata_path, sep='\t')
             self.is_metadata_read = True
             try:
-                self.metadata = self.metadata.set_index('#SampleID')
+                self.metadata = self.metadata.set_index('SampleID')
                 self.metadata = self.metadata.drop('#q2:types')
             except:
                 print('no column named #SampleID or no c #q2:types row')
@@ -36,17 +36,18 @@ class MetaGenomicsPreprocessing(object):
                 pass
         return 1.0*count/len(feature_arr)
 
-    def select_feature(self, thd=0.05):
+    def select_feature(self, select_condition=lambda x: x < 0.01):
         """ remove some features whose prevalence is lower than fixed threshold
         Args:
-            thd: a threshold 
+            select_condition: a function used to select feature,which return 
+                False or True  
         """
         with Pool() as p:
             prvl = p.map(self.compute_prevalence, self.feature_table.columns)
         columns = self.feature_table.columns
         remove_columns = []
         for i, ele in enumerate(prvl):
-            if ele < thd:
+            if not select_condition(ele):
                 remove_columns.append(columns[i])
         self.feature_table = self.feature_table.drop(columns=remove_columns)
 
@@ -177,12 +178,12 @@ class MetaGenomicsPreprocessing(object):
                 pass
         self.separate_biom_labels = result
         
-    def preprocess_pipeline(self,obj_col,thd,wanted_labels,sep_col=None):
+    def preprocess_pipeline(self,obj_col,select_condition,wanted_labels,sep_col=None):
         """ run the preprocess pipeline.
             Args:
         """
         self.explor_metadata(obj_col)
-        self.select_feature(thd)
+        self.select_feature(select_condition)
         self.select_sample(obj_col,wanted_labels)
         sep_col_state = 'no'
         if sep_col:
