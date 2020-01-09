@@ -4,17 +4,24 @@ import pandas as pd
 from multiprocessing import Pool
 from plotly import graph_objs as go
 import plotly
+import copy
 class MetaGenomicsPreprocessing(object):
     def __init__(self,metadata_path=None,biom_path=None):
         if metadata_path:
             self.metadata = pd.read_csv(metadata_path, sep='\t')
             self.is_metadata_read = True
+
+            # TODO re sampleid 
+
             try:
-                self.metadata = self.metadata.set_index('SampleID')
+                self.metadata = self.metadata.set_index('#SampleID')
+            except:
+                print('no column named #SampleID')
+                
+            try:
                 self.metadata = self.metadata.drop('#q2:types')
             except:
-                print('no column named #SampleID or no c #q2:types row')
-
+                print(' no #q2:types row')
         else:
             self.is_metadata_read = False
         if biom_path:
@@ -69,6 +76,13 @@ class MetaGenomicsPreprocessing(object):
         self.feature_table = self.feature_table.loc[idxs]
         self.y = self.metadata[obj_col]
         """
+    def denumerate_labels(self,obj_col,defunc= lamdba x: x >= 28):
+        idxs = self.feature_table.index
+        new_labels = copy.copy(self.metatada[obj_col].loc[idx])
+        for idx in new_labels.index:
+            temp_label = defunc(new_labels[idx])
+            new_labels[idx] = temp_label
+            
 
     def explor_metadata(self, obj_col=None, plot_flag=False):
         if not obj_col:
